@@ -5,5 +5,6 @@
   "crossoverRatio": 0.5,
   "generations": 50000,
   "mutationPressure": 0.15,
-  "dataFile": "../data/data.txt"
+  "dataFile": "data/data.txt",
+  "maxTime": 300
 }

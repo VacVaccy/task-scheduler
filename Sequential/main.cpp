@@ -25,6 +25,7 @@ struct Config {
     int generations;
     double mutationPressure;
     string dataFile;
+    int maxTime;
 };
 
 Config loadConfig(const string& configFile) {
@@ -45,6 +46,7 @@ Config loadConfig(const string& configFile) {
     config.generations = j.value("generations", 50000);
     config.mutationPressure = j.value("mutationPressure", 0.15);
     config.dataFile = j.value("dataFile", "../data/data.txt");
+    config.maxTime = j.value("maxTime", 300);
 
     return config;
 }
@@ -317,9 +319,6 @@ int main() {
         return 1;
     }
 
-    int totalTaskTime = accumulate(taskDurations.begin(), taskDurations.end(), 0);
-    int lowerBound = static_cast<int>(ceil(static_cast<double>(totalTaskTime) / numMachines));
-    cout << "Approximate theoretical minimum Cmax: " << lowerBound << endl;
 
     int chromosomesPreserved = max(1, static_cast<int>(config.populationsSize * config.chromosomesPreservedPercentage / 100.0));
     int maxNewChromosomes = config.populationsSize - chromosomesPreserved;
@@ -340,9 +339,13 @@ int main() {
         }
     }
 
+    
+    int totalTaskTime = accumulate(taskDurations.begin(), taskDurations.end(), 0);
+    int lowerBound = static_cast<int>(ceil(static_cast<double>(totalTaskTime) / numMachines));
     cout << "\nFinal Results:" << endl;
     cout << "Best Cmax: " << bestChromosome.fitness << endl;
     cout << "Found in generation: " << bestChromosome.generation << endl;
+    cout << "Lower bound: " << lowerBound << endl;
 
     return 0;
 }
