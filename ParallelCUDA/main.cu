@@ -86,7 +86,7 @@ pair<vector<vector<Gene>>, vector<int>> initialGeneration(const vector<int>& tas
 
 __global__ void fitnessCalculationKernel(int* chromosomes, const int* taskDurations, int* fitness, int numMachines, int numTasks, int populationSize);
 __global__ void mutationKernel(int* chromosomes, const int* taskDurations, int numMachines, int numTasks, int populationSize, double mutationProbBase, double mutationPressure, curandState* states);
-__global__ void crossoverKernel(const int* parentChromosomes, int* childChromosomes, int numTasks, int populationSize, curandState* states);
+__global__ void crossoverKernel(const int* parentChromosomes, int* childChromosomes, int numTasks, int populationSize, curandState* states, double proportion);
 __global__ void initCurandStatesKernel(unsigned int seed, int offset, int sequence_offset, curandState *states);
 
 void runGeneticAlgorithmOnGPU(Config config, int numMachines, const vector<int>& taskDurations, BestChromosome& bestChromosome);
@@ -277,10 +277,10 @@ __global__ void mutationKernel(int* chromosomes, const int* taskDurations, int n
     }
 }
 
-__global__ void crossoverKernel(const int* parentChromosomes, int* childChromosomes, int numTasks, int populationSize, curandState* states) {
+__global__ void crossoverKernel(const int* parentChromosomes, int* childChromosomes, int numTasks, int populationSize, curandState* states, double proportion) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x; 
 
-    if (idx >= populationSize) {
+    if (idx >= populationSize/2) { 
         return;
     }
 
@@ -288,16 +288,53 @@ __global__ void crossoverKernel(const int* parentChromosomes, int* childChromoso
 
     int parent1_idx = curand(&localState) % populationSize;
     int parent2_idx = curand(&localState) % populationSize;
-
+    
     while (populationSize > 1 && parent2_idx == parent1_idx) { 
         parent2_idx = curand(&localState) % populationSize;
     }
 
+    int splitPoint = static_cast<int>(numTasks * proportion);
+    splitPoint = max(1, min(numTasks - 1, splitPoint));
+
+    int child1_idx = 2 * idx;
+    int child2_idx = 2 * idx + 1;
+
+    bool usedInChild1[MAX_MACHINES_PER_CHROMOSOME]; 
+    bool usedInChild2[MAX_MACHINES_PER_CHROMOSOME];
     for (int i = 0; i < numTasks; ++i) {
-        if (curand_uniform_double(&localState) < 0.5) { 
-            childChromosomes[idx * numTasks + i] = parentChromosomes[parent1_idx * numTasks + i];
-        } else {
-            childChromosomes[idx * numTasks + i] = parentChromosomes[parent2_idx * numTasks + i];
+        usedInChild1[i] = false;
+        usedInChild2[i] = false;
+    }
+
+    for (int i = 0; i < splitPoint; ++i) {
+        int task = parentChromosomes[parent1_idx * numTasks + i];
+        childChromosomes[child1_idx * numTasks + i] = task;
+        usedInChild1[task] = true;
+    }
+
+    for (int i = 0; i < splitPoint; ++i) {
+        int task = parentChromosomes[parent2_idx * numTasks + i];
+        childChromosomes[child2_idx * numTasks + i] = task;
+        usedInChild2[task] = true;
+    }
+
+    int pos = splitPoint;
+    for (int i = 0; i < numTasks && pos < numTasks; ++i) {
+        int task = parentChromosomes[parent2_idx * numTasks + i];
+        if (!usedInChild1[task]) {
+            childChromosomes[child1_idx * numTasks + pos] = task;
+            usedInChild1[task] = true;
+            pos++;
+        }
+    }
+
+    pos = splitPoint;
+    for (int i = 0; i < numTasks && pos < numTasks; ++i) {
+        int task = parentChromosomes[parent1_idx * numTasks + i];
+        if (!usedInChild2[task]) {
+            childChromosomes[child2_idx * numTasks + pos] = task;
+            usedInChild2[task] = true;
+            pos++;
         }
     }
 }
@@ -380,7 +417,7 @@ void runGeneticAlgorithmOnGPU(Config config, int numMachines, const vector<int>&
 
         dim3 crossover_blocks((numOffspring + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK);
         dim3 crossover_threads(THREADS_PER_BLOCK);
-        crossoverKernel<<<crossover_blocks, crossover_threads>>>(d_population, d_offspring, numTasks, populationSize, d_randStates);
+        crossoverKernel<<<crossover_blocks, crossover_threads>>>(d_population, d_offspring, numTasks, populationSize, d_randStates, config.splitPointRatio);
         CUDA_CHECK(cudaDeviceSynchronize()); 
 
         dim3 mutation_blocks((numOffspring + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK);
