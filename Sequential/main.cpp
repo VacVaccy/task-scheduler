@@ -19,9 +19,9 @@ using json = nlohmann::json;
 
 struct Config {
     double mutationProbability;
-    int populationsSize;
+    int populationSize;
     int chromosomesPreservedPercentage;
-    double crossoverRatio;
+    double splitPointRatio;
     int generations;
     double mutationPressure;
     string dataFile;
@@ -40,9 +40,9 @@ Config loadConfig(const string& configFile) {
 
     Config config;
     config.mutationProbability = j.value("mutationProbability", 0.35);
-    config.populationsSize = j.value("populationsSize", 50);
+    config.populationSize = j.value("populationSize", 50);
     config.chromosomesPreservedPercentage = j.value("chromosomesPreservedPercentage", 5);
-    config.crossoverRatio = j.value("crossoverRatio", 0.5);
+    config.splitPointRatio = j.value("splitPointRatio", 0.5);
     config.generations = j.value("generations", 50000);
     config.mutationPressure = j.value("mutationPressure", 0.15);
     config.dataFile = j.value("dataFile", "../data/data.txt");
@@ -66,15 +66,14 @@ struct BestChromosome {
 
 pair<int, vector<int>> parseData(const string& filename);
 vector<Gene> greedy(int numMachines, vector<int>& taskDurations);
-pair<vector<vector<Gene>>, vector<int>> initialGeneration(vector<int> taskDurations, int populationsSize, int numMachines);
+pair<vector<vector<Gene>>, vector<int>> initialGeneration(vector<int> taskDurations, int populationSize, int numMachines);
 pair<vector<vector<Gene>>, vector<int>> sortChromosomes(vector<vector<Gene>> chromosomes, vector<int> fitness);
 
 int fitnessCalculation(int machines, const vector<Gene>& chromosome, const vector<int>& taskDurations);
 
 void mutation(double mutationProbability, vector<Gene>& chromosome, int numMachines, int mutationRange, const vector<int>& taskDurations, double pressure, mt19937& gen);
 pair<vector<Gene>, vector<Gene>> crossing(const vector<Gene>& chromosome1, const vector<Gene>& chromosome2, double proportion, const vector<int>& taskDurations, mt19937& gen);
-pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromosomes, vector<int>& fitness, double mutationProbability, int chromosomesPreserved, int maxNewChromosomes, int numMachines, vector<int>& taskDurations, double crossoverRatio, double pressure, mt19937& gen);
-
+pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromosomes, vector<int>& fitness, double mutationProbability, int chromosomesPreserved, int maxNewChromosomes, int numMachines, vector<int>& taskDurations, double splitPointRatio, double pressure, mt19937& gen);
 
 void mutation(double mutationProbability, vector<Gene>& chromosome, int numMachines, int mutationRange, const vector<int>& taskDurations, double pressure, mt19937& gen) {
     vector<int> machineLoads(numMachines, 0);
@@ -249,7 +248,7 @@ pair<vector<vector<Gene>>, vector<int>> sortChromosomes(vector<vector<Gene>> chr
     return {chromosomes, fitness};
 }
 
-pair<vector<vector<Gene>>, vector<int>> initialGeneration(vector<int> taskDurations, int populationsSize, int numMachines, mt19937& gen) {
+pair<vector<vector<Gene>>, vector<int>> initialGeneration(vector<int> taskDurations, int populationSize, int numMachines, mt19937& gen) {
     vector<vector<Gene>> chromosomes;
     vector<int> fitness;
 
@@ -257,10 +256,9 @@ pair<vector<vector<Gene>>, vector<int>> initialGeneration(vector<int> taskDurati
     fitness.push_back(fitnessCalculation(numMachines, chromosomes.back(), taskDurations));
     cout << "Greedy Cmax: " << fitness.back() << endl;
 
-
     uniform_int_distribution<int> machineDist(0, numMachines - 1);
 
-    for (int i = 1; i < populationsSize; ++i) {
+    for (int i = 1; i < populationSize; ++i) {
         vector<Gene> chromosome;
         for (int j = 0; j < taskDurations.size(); ++j) {
             chromosome.emplace_back(j, machineDist(gen));
@@ -272,7 +270,7 @@ pair<vector<vector<Gene>>, vector<int>> initialGeneration(vector<int> taskDurati
     return sortChromosomes(chromosomes, fitness);
 }
 
-pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromosomes, vector<int>& fitness, double mutationProbability, int chromosomesPreserved, int maxNewChromosomes, int numMachines, vector<int>& taskDurations, double crossoverRatio, double pressure, mt19937& gen) {
+pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromosomes, vector<int>& fitness, double mutationProbability, int chromosomesPreserved, int maxNewChromosomes, int numMachines, vector<int>& taskDurations, double splitPointRatio, double pressure, mt19937& gen) {
     vector<vector<Gene>> newPopulation(chromosomes.begin(), chromosomes.begin() + chromosomesPreserved);
     
     uniform_int_distribution<> parentDist(0, chromosomes.size() - 1);
@@ -283,7 +281,7 @@ pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromoso
         int parent1 = parentDist(gen);
         int parent2 = parentDist(gen);
         
-        auto [child1, child2] = crossing(chromosomes[parent1], chromosomes[parent2], crossoverRatio, taskDurations, gen);
+        auto [child1, child2] = crossing(chromosomes[parent1], chromosomes[parent2], splitPointRatio, taskDurations, gen);
         
         newPopulation.push_back(child1);
         offspringGenerated++;
@@ -319,26 +317,32 @@ int main() {
         return 1;
     }
 
+    int chromosomesPreserved = max(1, static_cast<int>(config.populationSize * config.chromosomesPreservedPercentage / 100.0));
+    int maxNewChromosomes = config.populationSize - chromosomesPreserved;
 
-    int chromosomesPreserved = max(1, static_cast<int>(config.populationsSize * config.chromosomesPreservedPercentage / 100.0));
-    int maxNewChromosomes = config.populationsSize - chromosomesPreserved;
-
-    auto [chromosomes, fitness] = initialGeneration(taskDurations, config.populationsSize, numMachines, gen);
+    auto [chromosomes, fitness] = initialGeneration(taskDurations, config.populationSize, numMachines, gen);
     BestChromosome bestChromosome = {chromosomes[0], fitness[0], 0};
 
+    auto startTime = chrono::steady_clock::now();
+
     for (int generation = 1; generation <= config.generations; ++generation) {
+        auto currentTime = chrono::steady_clock::now();
+        chrono::duration<double> elapsedTime = currentTime - startTime;
+        if (elapsedTime.count() >= config.maxTime) {
+            cout << "\nTime limit reached!" << endl;
+            break;
+        }
         if (generation % 10000 == 0) {
             cout << "GENERATION: " << generation << endl;
         }
 
-        tie(chromosomes, fitness) = evolution(chromosomes, fitness, config.mutationProbability, chromosomesPreserved, maxNewChromosomes, numMachines, taskDurations, config.crossoverRatio, config.mutationPressure, gen);
+        tie(chromosomes, fitness) = evolution(chromosomes, fitness, config.mutationProbability, chromosomesPreserved, maxNewChromosomes, numMachines, taskDurations, config.splitPointRatio, config.mutationPressure, gen);
 
         if (fitness[0] < bestChromosome.fitness) {
             bestChromosome = {chromosomes[0], fitness[0], generation};
-            cout << "Generation " << generation << ": New best Cmax = " << bestChromosome.fitness << endl;
+            cout << "Generation " << generation << ": New best Cmax = " << bestChromosome.fitness << " Elapsed time: " << elapsedTime.count() << "s" << endl;
         }
     }
-
     
     int totalTaskTime = accumulate(taskDurations.begin(), taskDurations.end(), 0);
     int lowerBound = static_cast<int>(ceil(static_cast<double>(totalTaskTime) / numMachines));

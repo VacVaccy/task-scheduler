@@ -3,17 +3,22 @@
         {
             "name": "Win32",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.9/include",
+                "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.9/include/crt",
+                "D:/msys264bit/mingw64/include",
+                "D:/msys264bit/mingw64/lib/gcc/x86_64-w64-mingw32/12.2.0/include"
             ],
             "defines": [
                 "_DEBUG",
                 "UNICODE",
-                "_UNICODE"
+                "_UNICODE",
+                "__CUDA_ARCH__=500"
             ],
-            "compilerPath": "D:\\msys264bit\\mingw64\\bin\\gcc.exe",
+            "compilerPath": "D:/Programs/MicrosoftVisualStudio-2022-BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe",
             "cStandard": "c17",
             "cppStandard": "gnu++17",
-            "intelliSenseMode": "windows-gcc-x64",
+            "intelliSenseMode": "windows-msvc-x64",
             "configurationProvider": "ms-vscode.cmake-tools"
         }
     ],
