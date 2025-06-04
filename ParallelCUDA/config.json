@@ -5,6 +5,6 @@
   "splitPointRatio": 0.5,
   "generations": 500000,
   "mutationPressure": 0.15,
-  "dataFile": "data/data.txt",
+  "dataFile": "data/m50n1000.txt",
   "maxTime": 3000
 }

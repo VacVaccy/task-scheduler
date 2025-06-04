@@ -19,7 +19,7 @@
 using namespace std;
 using json = nlohmann::json;
 
-#define MAX_MACHINES_PER_CHROMOSOME 256
+#define MAX_MACHINES_PER_CHROMOSOME 512
 #define THREADS_PER_BLOCK 256
 
 #define CUDA_CHECK(call) \

@@ -1,10 +1,10 @@
 {
   "mutationProbability": 0.35,
-  "populationSize": 250,
+  "populationSize": 60,
   "chromosomesPreservedPercentage": 5,
   "splitPointRatio": 0.5,
   "generations": 500000,
   "mutationPressure": 0.25,
-  "dataFile": "data/data.txt",
-  "maxTime": 30
+  "dataFile": "data/m10n200.txt",
+  "maxTime": 30000
 }
