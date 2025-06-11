@@ -1,6 +1,9 @@
 {
     "files.associations": {
         "tuple": "cpp",
-        "iostream": "cpp"
+        "iostream": "cpp",
+        "optional": "cpp",
+        "system_error": "cpp",
+        "fstream": "cpp"
     }
 }

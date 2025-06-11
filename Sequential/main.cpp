@@ -28,7 +28,7 @@ struct Config {
     int maxTime;
 };
 
-Config loadConfig(const string& configFile) {
+Config loadConfig(const string& configFile, const string& dataFilePath) {
     ifstream input(configFile);
     if (!input.is_open()) {
         cerr << "Could not open config file: " << configFile << endl;
@@ -45,7 +45,7 @@ Config loadConfig(const string& configFile) {
     config.splitPointRatio = j.value("splitPointRatio", 0.5);
     config.generations = j.value("generations", 50000);
     config.mutationPressure = j.value("mutationPressure", 0.15);
-    config.dataFile = j.value("dataFile", "../data/data.txt");
+    config.dataFile = dataFilePath;
     config.maxTime = j.value("maxTime", 300);
 
     return config;
@@ -82,7 +82,7 @@ void mutation(double mutationProbability, vector<Gene>& chromosome, int numMachi
     }
 
     int currentCmax = *max_element(machineLoads.begin(), machineLoads.end());
-
+    
     uniform_real_distribution<> probDist(0.0, 1.0);
     for (auto& gene : chromosome) {
         double criticality = (double)machineLoads[gene.machine] / currentCmax;
@@ -305,11 +305,18 @@ pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromoso
     return sortChromosomes(newPopulation, newFitness);
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        cerr << "Usage: " << argv[0] << " <dataFile.txt>" << endl;
+        return 1;
+    }
+
     random_device rd;
     mt19937 gen(rd());
 
-    Config config = loadConfig("config.json");
+    string dataFile = argv[1];
+
+    Config config = loadConfig("config.json", "data/" + dataFile);
 
     auto [numMachines, taskDurations] = parseData(config.dataFile);
     if (numMachines <= 0 || taskDurations.empty()) {

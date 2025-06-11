@@ -22,14 +22,14 @@ struct Config {
     double mutationProbability;
     int populationSize;
     int chromosomesPreservedPercentage;
-    double crossoverRatio;
+    double splitPointRatio;
     int generations;
     double mutationPressure;
     string dataFile;
     int maxTime;
 };
 
-Config loadConfig(const string& configFile) {
+Config loadConfig(const string& configFile, const string& dataFilePath) {
     ifstream input(configFile);
     if (!input.is_open()) {
         cerr << "Could not open config file: " << configFile << endl;
@@ -43,10 +43,10 @@ Config loadConfig(const string& configFile) {
     config.mutationProbability = j.value("mutationProbability", 0.35);
     config.populationSize = j.value("populationSize", 50);
     config.chromosomesPreservedPercentage = j.value("chromosomesPreservedPercentage", 5);
-    config.crossoverRatio = j.value("crossoverRatio", 0.5);
+    config.splitPointRatio = j.value("splitPointRatio", 0.5);
     config.generations = j.value("generations", 50000);
     config.mutationPressure = j.value("mutationPressure", 0.15);
-    config.dataFile = j.value("dataFile", "../data/data.txt");
+    config.dataFile = dataFilePath;
     config.maxTime = j.value("maxTime", 300);
 
     return config;
@@ -72,7 +72,7 @@ pair<vector<vector<Gene>>, vector<int>> sortChromosomes(vector<vector<Gene>> chr
 int fitnessCalculation(int machines, const vector<Gene>& chromosome, const vector<int>& taskDurations);
 void mutation(double mutationProbability, vector<Gene>& chromosome, int numMachines, int mutationRange, const vector<int>& taskDurations, double pressure, mt19937& gen);
 pair<vector<Gene>, vector<Gene>> crossing(const vector<Gene>& chromosome1, const vector<Gene>& chromosome2, double proportion, const vector<int>& taskDurations, mt19937& gen);
-pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromosomes, vector<int>& fitness, double mutationProbability, int chromosomesPreserved, int maxNewChromosomes, int numMachines, vector<int>& taskDurations, double crossoverRatio, double pressure, mt19937& gen);
+pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromosomes, vector<int>& fitness, double mutationProbability, int chromosomesPreserved, int maxNewChromosomes, int numMachines, vector<int>& taskDurations, double splitPointRatio, double pressure, mt19937& gen);
 
 pair<int, vector<int>> parseData(const string& filename) {
     ifstream file(filename);
@@ -270,7 +270,7 @@ pair<vector<Gene>, vector<Gene>> crossing(const vector<Gene>& chromosome1, const
     return {child1, child2};
 }
 
-pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromosomes, vector<int>& fitness, double mutationProbability, int chromosomesPreserved, int maxNewChromosomes, int numMachines, vector<int>& taskDurations, double crossoverRatio, double pressure, mt19937& gen) {
+pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromosomes, vector<int>& fitness, double mutationProbability, int chromosomesPreserved, int maxNewChromosomes, int numMachines, vector<int>& taskDurations, double splitPointRatio, double pressure, mt19937& gen) {
     vector<vector<Gene>> newPopulation(chromosomes.begin(), chromosomes.begin() + chromosomesPreserved);
     
     uniform_int_distribution<> parentDist(0, chromosomes.size() - 1);
@@ -281,7 +281,7 @@ pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromoso
         int parent1 = parentDist(gen);
         int parent2 = parentDist(gen);
         
-        auto [child1, child2] = crossing(chromosomes[parent1], chromosomes[parent2], crossoverRatio, taskDurations, gen);
+        auto [child1, child2] = crossing(chromosomes[parent1], chromosomes[parent2], splitPointRatio, taskDurations, gen);
         
         newPopulation.push_back(child1);
         offspringGenerated++;
@@ -305,8 +305,15 @@ pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromoso
     return sortChromosomes(newPopulation, newFitness);
 }
 
-int main() {
-    Config config = loadConfig("config.json");
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        cerr << "Usage: " << argv[0] << " <dataFile.txt>" << endl;
+        return 1;
+    }
+
+    string dataFile = argv[1];
+
+    Config config = loadConfig("config.json", "data/" + dataFile);
     auto [numMachines, taskDurations] = parseData(config.dataFile);
     if (numMachines <= 0 || taskDurations.empty()) {
         std::cerr << "Invalid input data" << std::endl;
@@ -363,7 +370,7 @@ int main() {
             auto [newChromosomes, newFitness] = evolution(
                 localChromosomes, localFitness, config.mutationProbability, 
                 chromosomesPreserved, maxNewChromosomes, numMachines, 
-                taskDurations, config.crossoverRatio, config.mutationPressure, gen
+                taskDurations, config.splitPointRatio, config.mutationPressure, gen
             );
 
             localChromosomes = newChromosomes;

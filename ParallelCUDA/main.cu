@@ -43,7 +43,7 @@ struct Config {
     int maxTime;
 };
 
-Config loadConfig(const string& configFile) {
+Config loadConfig(const string& configFile, const string& dataFilePath) {
     ifstream input(configFile);
     if (!input.is_open()) {
         cerr << "Could not open config file: " << configFile << endl;
@@ -54,14 +54,15 @@ Config loadConfig(const string& configFile) {
     input >> j;
 
     Config config;
-    config.mutationProbability = j.value("mutationProbability", 0.05); 
-    config.populationSize = j.value("populationSize", 200);        
-    config.chromosomesPreservedPercentage = j.value("chromosomesPreservedPercentage", 10); 
+    config.mutationProbability = j.value("mutationProbability", 0.35);
+    config.populationSize = j.value("populationSize", 50);
+    config.chromosomesPreservedPercentage = j.value("chromosomesPreservedPercentage", 5);
     config.splitPointRatio = j.value("splitPointRatio", 0.5);
     config.generations = j.value("generations", 50000);
-    config.mutationPressure = j.value("mutationPressure", 0.5);        
-    config.dataFile = j.value("dataFile", "../data/data.txt");
+    config.mutationPressure = j.value("mutationPressure", 0.15);
+    config.dataFile = dataFilePath;
     config.maxTime = j.value("maxTime", 300);
+
     return config;
 }
 
@@ -473,8 +474,15 @@ void runGeneticAlgorithmOnGPU(Config config, int numMachines, const vector<int>&
     CUDA_CHECK(cudaFree(d_randStates));
 }
 
-int main() {
-    Config config = loadConfig("config.json");
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        cerr << "Usage: " << argv[0] << " <dataFile.txt>" << endl;
+        return 1;
+    }
+
+    string dataFile = argv[1];
+
+    Config config = loadConfig("config.json", "data/" + dataFile);
     int numMachines;
     vector<int> taskDurations;
     std::tie(numMachines, taskDurations) = parseData(config.dataFile);

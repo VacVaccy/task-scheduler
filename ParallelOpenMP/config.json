@@ -5,6 +5,5 @@
   "splitPointRatio": 0.5,
   "generations": 500000,
   "mutationPressure": 0.25,
-  "dataFile": "data/m10n200.txt",
   "maxTime": 30000
 }
