@@ -32,17 +32,27 @@ do { \
     } \
 } while (0)
 
+/**
+ * @struct Config
+ * @brief Struktura przechowująca konfigurację algorytmu.
+ */
 struct Config {
-    double mutationProbability;
-    int populationSize;
-    int chromosomesPreservedPercentage;
-    double splitPointRatio; 
-    int generations;
-    double mutationPressure;
-    string dataFile;
-    int maxTime;
+    double mutationProbability;              ///< Prawdopodobieństwo mutacji.
+    int populationSize;                      ///< Liczba chromosomów w populacji.
+    int chromosomesPreservedPercentage;      ///< Procent zachowanych chromosomów elitarnych.
+    double splitPointRatio;                  ///< Punkt podziału w krzyżowaniu.
+    int generations;                         ///< Liczba pokoleń algorytmu.
+    double mutationPressure;                 ///< Wpływ presji mutacyjnej.
+    string dataFile;                         ///< Ścieżka do pliku z danymi zadań.
+    int maxTime;                             ///< Maksymalny czas działania algorytmu w sekundach.
 };
 
+/**
+ * @brief Wczytuje konfigurację z pliku JSON.
+ * @param configFile Ścieżka do pliku z konfiguracją.
+ * @param dataFilePath Ścieżka do pliku z danymi wejściowymi.
+ * @return Zainicjalizowana struktura Config.
+ */
 Config loadConfig(const string& configFile, const string& dataFilePath) {
     ifstream input(configFile);
     if (!input.is_open()) {
@@ -66,17 +76,30 @@ Config loadConfig(const string& configFile, const string& dataFilePath) {
     return config;
 }
 
+/**
+ * @struct Gene
+ * @brief Pojedynczy gen reprezentujący przypisanie zadania do maszyny.
+ */
 struct Gene {
-    int task;
-    int machine;
-
+    int task;      ///< ID zadania.
+    int machine;   ///< ID maszyny.
+    
+    /**
+     * @brief Konstruktor inicjalizujący gen.
+     * @param t ID zadania.
+     * @param m ID maszyny.
+     */
     Gene(int t, int m) : task(t), machine(m) {}
 };
 
+/**
+ * @struct BestChromosome
+ * @brief Struktura przechowująca najlepszy znaleziony chromosom.
+ */
 struct BestChromosome {
-    vector<Gene> chromosome;
-    int fitness;
-    int generation;
+    vector<Gene> chromosome; ///< Najlepszy chromosom (zadania i przypisania).
+    int fitness;             ///< Wartość dopasowania (Cmax).
+    int generation;          ///< Pokolenie, w którym znaleziono najlepszy wynik.
 };
 
 pair<int, vector<int>> parseData(const string& filename);
@@ -92,6 +115,11 @@ __global__ void initCurandStatesKernel(unsigned int seed, int offset, int sequen
 
 void runGeneticAlgorithmOnGPU(Config config, int numMachines, const vector<int>& taskDurations, BestChromosome& bestChromosome);
 
+/**
+ * @brief Wczytuje dane z pliku.
+ * @param filename Ścieżka do pliku z danymi.
+ * @return Para: liczba maszyn i lista czasów trwania zadań.
+ */
 pair<int, vector<int>> parseData(const string& filename) {
     ifstream file(filename);
     if (!file.is_open()) {
@@ -110,6 +138,12 @@ pair<int, vector<int>> parseData(const string& filename) {
     return {numMachines, taskDurations};
 }
 
+/**
+ * @brief Algorytm zachłanny przypisujący zadania do najmniej obciążonej maszyny.
+ * @param numMachines Liczba maszyn.
+ * @param taskDurations Lista czasów trwania zadań.
+ * @return Chromosom utworzony przez algorytm zachłanny.
+ */
 vector<Gene> greedy(int numMachines, const vector<int>& taskDurations) {
     vector<int> taskOrder(taskDurations.size());
     vector<int> machinesLoad(numMachines, 0); 
@@ -127,6 +161,13 @@ vector<Gene> greedy(int numMachines, const vector<int>& taskDurations) {
     return chromosome;
 }
 
+/**
+ * @brief Oblicza funkcję celu (Cmax) dla danego chromosomu.
+ * @param machines Liczba maszyn.
+ * @param chromosome Lista genów (zadania i przypisania).
+ * @param taskDurations Lista czasów trwania zadań.
+ * @return Czas zakończenia (Cmax).
+ */
 int fitnessCalculation(int numMachines, const vector<Gene>& chromosome, const vector<int>& taskDurations) {
     vector<int> timesList(numMachines, 0); 
     for (const auto& gene : chromosome) {
@@ -143,6 +184,12 @@ int fitnessCalculation(int numMachines, const vector<Gene>& chromosome, const ve
     return static_cast<int>(*max_element(timesList.begin(), timesList.end()));
 }
 
+/**
+ * @brief Sortuje chromosomy na podstawie ich dopasowania.
+ * @param chromosomes Lista chromosomów.
+ * @param fitness Lista wartości dopasowania.
+ * @return Posortowane chromosomy i ich dopasowania.
+ */
 pair<vector<vector<Gene>>, vector<int>> sortChromosomes(vector<vector<Gene>> chromosomes, vector<int> fitness) {
     vector<pair<vector<Gene>, int>> zipped;
     for (size_t i = 0; i < chromosomes.size(); ++i) {
@@ -159,6 +206,14 @@ pair<vector<vector<Gene>>, vector<int>> sortChromosomes(vector<vector<Gene>> chr
     return {chromosomes, fitness};
 }
 
+/**
+ * @brief Generuje początkową populację.
+ * @param taskDurations Lista czasów trwania zadań.
+ * @param populationSize Rozmiar populacji.
+ * @param numMachines Liczba maszyn.
+ * @param gen Generator liczb losowych.
+ * @return Populacja i jej dopasowania.
+ */
 pair<vector<vector<Gene>>, vector<int>> initialGeneration(const vector<int>& taskDurations, int populationSize, int numMachines) {
     vector<vector<Gene>> chromosomes;
     vector<int> fitness;
@@ -178,6 +233,19 @@ pair<vector<vector<Gene>>, vector<int>> initialGeneration(const vector<int>& tas
     return sortChromosomes(chromosomes, fitness);
 }
 
+/**
+ * @brief Jądro CUDA obliczające dopasowanie (fitness) dla każdej jednostki w populacji.
+ *
+ * Każdy wątek przetwarza jeden chromosom, obliczając jego Cmax na podstawie
+ * przypisań zadań do maszyn oraz ich czasów trwania.
+ *
+ * @param chromosomes Tablica chromosomów (zadania przypisane do maszyn), rozmiar: populationSize × numTasks.
+ * @param taskDurations Czas trwania każdego zadania, rozmiar: numTasks.
+ * @param fitness Wyjściowa tablica wartości fitness (Cmax), rozmiar: populationSize.
+ * @param numMachines Liczba maszyn dostępnych w systemie.
+ * @param numTasks Liczba zadań w każdym chromosomie.
+ * @param populationSize Liczba chromosomów w populacji.
+ */
 __global__ void fitnessCalculationKernel(int* chromosomes, const int* taskDurations, int* fitness, int numMachines, int numTasks, int populationSize) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x; 
 
@@ -212,6 +280,21 @@ __global__ void fitnessCalculationKernel(int* chromosomes, const int* taskDurati
     fitness[idx] = maxLoad;
 }
 
+/**
+ * @brief Jądro CUDA odpowiedzialne za mutację populacji chromosomów.
+ *
+ * Dla każdego zadania w chromosomie istnieje prawdopodobieństwo mutacji zależne
+ * od jego wpływu na Cmax. Mutacja może zmienić przypisanie zadania do innej maszyny.
+ *
+ * @param chromosomes Tablica chromosomów do zmodyfikowania, rozmiar: populationSize × numTasks.
+ * @param taskDurations Czas trwania każdego zadania, rozmiar: numTasks.
+ * @param numMachines Liczba maszyn.
+ * @param numTasks Liczba zadań.
+ * @param populationSize Liczba chromosomów w populacji.
+ * @param mutationProbBase Bazowe prawdopodobieństwo mutacji.
+ * @param mutationPressure Presja mutacyjna wpływająca na dynamiczne zwiększanie prawdopodobieństwa.
+ * @param states Tablica stanów losowych CURAND, rozmiar: populationSize.
+ */
 __global__ void mutationKernel(int* chromosomes, const int* taskDurations, int numMachines, int numTasks, int populationSize, double mutationProbBase, double mutationPressure, curandState* states) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x; 
     
@@ -278,6 +361,19 @@ __global__ void mutationKernel(int* chromosomes, const int* taskDurations, int n
     }
 }
 
+/**
+ * @brief Jądro CUDA wykonujące krzyżowanie (crossover) chromosomów.
+ *
+ * Dla każdej pary potomków losowani są dwaj rodzice, po czym wykonuje się krzyżowanie
+ * jednopunktowe (1-point crossover) według proporcji `proportion`.
+ *
+ * @param parentChromosomes Tablica chromosomów rodziców, rozmiar: populationSize × numTasks.
+ * @param childChromosomes Wyjściowa tablica chromosomów potomnych, rozmiar: populationSize × numTasks.
+ * @param numTasks Liczba zadań w chromosomie.
+ * @param populationSize Liczba chromosomów w populacji (musi być parzysta).
+ * @param states Tablica stanów CURAND do generowania liczb pseudolosowych.
+ * @param proportion Współczynnik podziału chromosomu (0 < proportion < 1).
+ */
 __global__ void crossoverKernel(const int* parentChromosomes, int* childChromosomes, int numTasks, int populationSize, curandState* states, double proportion) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x; 
 
@@ -340,11 +436,34 @@ __global__ void crossoverKernel(const int* parentChromosomes, int* childChromoso
     }
 }
 
+/**
+ * @brief Inicjalizuje stany generatora CURAND.
+ *
+ * Każdy wątek inicjalizuje własny stan CURAND na podstawie ziarna, offsetu i sekwencji.
+ *
+ * @param seed Ziarno (seed) generatora losowego.
+ * @param offset Offset w indeksie.
+ * @param sequence_offset Offset sekwencji losowej.
+ * @param states Wyjściowa tablica stanów CURAND, rozmiar: liczba wątków.
+ */
 __global__ void initCurandStatesKernel(unsigned int seed, int offset, int sequence_offset, curandState *states) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     curand_init(seed, idx + offset, sequence_offset, &states[idx]);
 }
 
+/**
+ * @brief Uruchamia algorytm genetyczny na GPU.
+ * 
+ * Funkcja inicjalizuje populację chromosomów, alokuje pamięć na GPU, 
+ * wykonuje kolejne pokolenia algorytmu genetycznego z operacjami 
+ * krzyżowania, mutacji oraz oceny dopasowania (fitness). 
+ * Po zakończeniu działania aktualizuje najlepszy znaleziony chromosom.
+ * 
+ * @param config Konfiguracja algorytmu (parametry takie jak rozmiar populacji, liczba generacji itp.)
+ * @param numMachines Liczba maszyn dostępnych do przydzielenia zadań.
+ * @param taskDurations Wektor z czasami trwania zadań.
+ * @param bestChromosome Referencja do struktury przechowującej najlepszy znaleziony chromosom oraz jego fitness.
+ */
 void runGeneticAlgorithmOnGPU(Config config, int numMachines, const vector<int>& taskDurations, BestChromosome& bestChromosome) {
     int numTasks = taskDurations.size();
     int populationSize = config.populationSize;
@@ -474,6 +593,18 @@ void runGeneticAlgorithmOnGPU(Config config, int numMachines, const vector<int>&
     CUDA_CHECK(cudaFree(d_randStates));
 }
 
+/**
+ * @brief Główna funkcja programu.
+ * 
+ * Wczytuje dane wejściowe z pliku, ładuje konfigurację algorytmu, 
+ * wywołuje algorytm genetyczny działający na GPU, a następnie wyświetla
+ * końcowe wyniki, takie jak najlepszy czas zakończenia (Cmax), generacja, 
+ * w której znaleziono rozwiązanie, oraz dolna granica optymalnego rozwiązania.
+ * 
+ * @param argc Liczba argumentów wiersza poleceń.
+ * @param argv Tablica argumentów wiersza poleceń.
+ * @return int Kod zakończenia programu (0 - sukces, 1 - błąd).
+ */
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         cerr << "Usage: " << argv[0] << " <dataFile.txt>" << endl;

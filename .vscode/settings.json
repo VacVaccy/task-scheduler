@@ -4,6 +4,7 @@
         "iostream": "cpp",
         "optional": "cpp",
         "system_error": "cpp",
-        "fstream": "cpp"
+        "fstream": "cpp",
+        "random": "cpp"
     }
 }

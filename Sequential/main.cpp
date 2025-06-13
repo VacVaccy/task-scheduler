@@ -17,17 +17,27 @@
 using namespace std;
 using json = nlohmann::json;
 
+/**
+ * @struct Config
+ * @brief Struktura przechowująca konfigurację algorytmu.
+ */
 struct Config {
-    double mutationProbability;
-    int populationSize;
-    int chromosomesPreservedPercentage;
-    double splitPointRatio;
-    int generations;
-    double mutationPressure;
-    string dataFile;
-    int maxTime;
+    double mutationProbability;              ///< Prawdopodobieństwo mutacji.
+    int populationSize;                      ///< Liczba chromosomów w populacji.
+    int chromosomesPreservedPercentage;      ///< Procent zachowanych chromosomów elitarnych.
+    double splitPointRatio;                  ///< Punkt podziału w krzyżowaniu.
+    int generations;                         ///< Liczba pokoleń algorytmu.
+    double mutationPressure;                 ///< Wpływ presji mutacyjnej.
+    string dataFile;                         ///< Ścieżka do pliku z danymi zadań.
+    int maxTime;                             ///< Maksymalny czas działania algorytmu w sekundach.
 };
 
+/**
+ * @brief Wczytuje konfigurację z pliku JSON.
+ * @param configFile Ścieżka do pliku z konfiguracją.
+ * @param dataFilePath Ścieżka do pliku z danymi wejściowymi.
+ * @return Zainicjalizowana struktura Config.
+ */
 Config loadConfig(const string& configFile, const string& dataFilePath) {
     ifstream input(configFile);
     if (!input.is_open()) {
@@ -51,30 +61,51 @@ Config loadConfig(const string& configFile, const string& dataFilePath) {
     return config;
 }
 
+/**
+ * @struct Gene
+ * @brief Pojedynczy gen reprezentujący przypisanie zadania do maszyny.
+ */
 struct Gene {
-    int task;
-    int machine;
+    int task;      ///< ID zadania.
+    int machine;   ///< ID maszyny.
 
+    /**
+     * @brief Konstruktor inicjalizujący gen.
+     * @param t ID zadania.
+     * @param m ID maszyny.
+     */
     Gene(int t, int m) : task(t), machine(m) {}
 };
 
+/**
+ * @struct BestChromosome
+ * @brief Struktura przechowująca najlepszy znaleziony chromosom.
+ */
 struct BestChromosome {
-    vector<Gene> chromosome;
-    int fitness;
-    int generation;
+    vector<Gene> chromosome; ///< Najlepszy chromosom (zadania i przypisania).
+    int fitness;             ///< Wartość dopasowania (Cmax).
+    int generation;          ///< Pokolenie, w którym znaleziono najlepszy wynik.
 };
 
 pair<int, vector<int>> parseData(const string& filename);
 vector<Gene> greedy(int numMachines, vector<int>& taskDurations);
 pair<vector<vector<Gene>>, vector<int>> initialGeneration(vector<int> taskDurations, int populationSize, int numMachines);
 pair<vector<vector<Gene>>, vector<int>> sortChromosomes(vector<vector<Gene>> chromosomes, vector<int> fitness);
-
 int fitnessCalculation(int machines, const vector<Gene>& chromosome, const vector<int>& taskDurations);
-
 void mutation(double mutationProbability, vector<Gene>& chromosome, int numMachines, int mutationRange, const vector<int>& taskDurations, double pressure, mt19937& gen);
 pair<vector<Gene>, vector<Gene>> crossing(const vector<Gene>& chromosome1, const vector<Gene>& chromosome2, double proportion, const vector<int>& taskDurations, mt19937& gen);
 pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromosomes, vector<int>& fitness, double mutationProbability, int chromosomesPreserved, int maxNewChromosomes, int numMachines, vector<int>& taskDurations, double splitPointRatio, double pressure, mt19937& gen);
 
+/**
+ * @brief Przeprowadza mutację chromosomu z uwzględnieniem presji mutacyjnej.
+ * @param mutationProbability Bazowe prawdopodobieństwo mutacji.
+ * @param chromosome Chromosom do zmodyfikowania.
+ * @param numMachines Liczba maszyn.
+ * @param mutationRange Zakres zmiany przypisania.
+ * @param taskDurations Lista czasów trwania zadań.
+ * @param pressure Współczynnik presji mutacyjnej.
+ * @param gen Generator liczb losowych.
+ */
 void mutation(double mutationProbability, vector<Gene>& chromosome, int numMachines, int mutationRange, const vector<int>& taskDurations, double pressure, mt19937& gen) {
     vector<int> machineLoads(numMachines, 0);
     for (const auto& gene : chromosome) {
@@ -121,6 +152,12 @@ void mutation(double mutationProbability, vector<Gene>& chromosome, int numMachi
     }
 }
 
+/**
+ * @brief Algorytm zachłanny przypisujący zadania do najmniej obciążonej maszyny.
+ * @param numMachines Liczba maszyn.
+ * @param taskDurations Lista czasów trwania zadań.
+ * @return Chromosom utworzony przez algorytm zachłanny.
+ */
 vector<Gene> greedy(int numMachines, vector<int>& taskDurations) {
     vector<int> taskOrder(taskDurations.size());
     vector<int> machinesLoad(numMachines, 0); 
@@ -143,6 +180,13 @@ vector<Gene> greedy(int numMachines, vector<int>& taskDurations) {
     return chromosome;
 }
 
+/**
+ * @brief Oblicza funkcję celu (Cmax) dla danego chromosomu.
+ * @param machines Liczba maszyn.
+ * @param chromosome Lista genów (zadania i przypisania).
+ * @param taskDurations Lista czasów trwania zadań.
+ * @return Czas zakończenia (Cmax).
+ */
 int fitnessCalculation(int machines, const vector<Gene>& chromosome, const vector<int>& taskDurations) {
     vector<int> timesList(machines, 0);
 
@@ -161,6 +205,11 @@ int fitnessCalculation(int machines, const vector<Gene>& chromosome, const vecto
     return *max_element(timesList.begin(), timesList.end());
 }
 
+/**
+ * @brief Wczytuje dane z pliku.
+ * @param filename Ścieżka do pliku z danymi.
+ * @return Para: liczba maszyn i lista czasów trwania zadań.
+ */
 pair<int, vector<int>> parseData(const string& filename) {
     ifstream file(filename);
     if (!file.is_open()) {
@@ -181,6 +230,15 @@ pair<int, vector<int>> parseData(const string& filename) {
     return {numMachines, taskDurations};
 }
 
+/**
+ * @brief Przeprowadza krzyżowanie dwóch chromosomów.
+ * @param chromosome1 Pierwszy chromosom.
+ * @param chromosome2 Drugi chromosom.
+ * @param proportion Proporcja podziału.
+ * @param taskDurations Lista czasów trwania zadań.
+ * @param gen Generator liczb losowych.
+ * @return Para nowych chromosomów (dzieci).
+ */
 pair<vector<Gene>, vector<Gene>> crossing(const vector<Gene>& chromosome1, const vector<Gene>& chromosome2, double proportion, const vector<int>& taskDurations, mt19937& gen) {
     if (chromosome1.size() != chromosome2.size() || chromosome1.size() != taskDurations.size()) {
         cerr << "Error: Chromosome size mismatch in crossover" << endl;
@@ -228,6 +286,12 @@ pair<vector<Gene>, vector<Gene>> crossing(const vector<Gene>& chromosome1, const
     return {child1, child2};
 }
 
+/**
+ * @brief Sortuje chromosomy na podstawie ich dopasowania.
+ * @param chromosomes Lista chromosomów.
+ * @param fitness Lista wartości dopasowania.
+ * @return Posortowane chromosomy i ich dopasowania.
+ */
 pair<vector<vector<Gene>>, vector<int>> sortChromosomes(vector<vector<Gene>> chromosomes, vector<int> fitness) {
     vector<pair<vector<Gene>, int>> zipped;
     for (size_t i = 0; i < chromosomes.size(); ++i) {
@@ -248,6 +312,14 @@ pair<vector<vector<Gene>>, vector<int>> sortChromosomes(vector<vector<Gene>> chr
     return {chromosomes, fitness};
 }
 
+/**
+ * @brief Generuje początkową populację.
+ * @param taskDurations Lista czasów trwania zadań.
+ * @param populationSize Rozmiar populacji.
+ * @param numMachines Liczba maszyn.
+ * @param gen Generator liczb losowych.
+ * @return Populacja i jej dopasowania.
+ */
 pair<vector<vector<Gene>>, vector<int>> initialGeneration(vector<int> taskDurations, int populationSize, int numMachines, mt19937& gen) {
     vector<vector<Gene>> chromosomes;
     vector<int> fitness;
@@ -270,6 +342,20 @@ pair<vector<vector<Gene>>, vector<int>> initialGeneration(vector<int> taskDurati
     return sortChromosomes(chromosomes, fitness);
 }
 
+/**
+ * @brief Przeprowadza jedną iterację ewolucji populacji.
+ * @param chromosomes Populacja chromosomów.
+ * @param fitness Lista wartości dopasowania.
+ * @param mutationProbability Prawdopodobieństwo mutacji.
+ * @param chromosomesPreserved Liczba zachowanych chromosomów elitarnych.
+ * @param maxNewChromosomes Liczba nowych chromosomów.
+ * @param numMachines Liczba maszyn.
+ * @param taskDurations Lista czasów trwania zadań.
+ * @param splitPointRatio Proporcja podziału w krzyżowaniu.
+ * @param pressure Presja mutacyjna.
+ * @param gen Generator liczb losowych.
+ * @return Nowa populacja i ich dopasowania.
+ */
 pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromosomes, vector<int>& fitness, double mutationProbability, int chromosomesPreserved, int maxNewChromosomes, int numMachines, vector<int>& taskDurations, double splitPointRatio, double pressure, mt19937& gen) {
     vector<vector<Gene>> newPopulation(chromosomes.begin(), chromosomes.begin() + chromosomesPreserved);
     
@@ -305,6 +391,18 @@ pair<vector<vector<Gene>>, vector<int>> evolution(vector<vector<Gene>>& chromoso
     return sortChromosomes(newPopulation, newFitness);
 }
 
+/**
+ * @brief Punkt wejścia do programu.
+ * 
+ * Użycie: ./program <plik_danych.txt>
+ * 
+ * Program wczytuje dane i konfigurację, inicjalizuje populację i uruchamia algorytm ewolucyjny
+ * w celu minimalizacji czasu zakończenia (Cmax) przy przypisaniu zadań do maszyn.
+ * 
+ * @param argc Liczba argumentów.
+ * @param argv Tablica argumentów.
+ * @return Kod wyjścia programu.
+ */
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         cerr << "Usage: " << argv[0] << " <dataFile.txt>" << endl;
